@@ -4,11 +4,12 @@ from google.api_core import exceptions as google_exceptions
 from transformers import pipeline
 
 class Summarizer:
-    def __init__(self, summarizer_type="gemini"):
+    def __init__(self, summarizer_type="gemini", gemini_model="gemini-2.5-flash"):
         """
         Inicializa o módulo de resumo: pode ser 'gemini' (nuvem) ou 'local' (transformers)
         """
         self.summarizer_type = summarizer_type.lower()
+        self.gemini_model = gemini_model
         self.local_summarizer = None
         
         if self.summarizer_type == "gemini":
@@ -22,8 +23,9 @@ class Summarizer:
                 
         if self.summarizer_type == "local":
             print("Carregando modelo local de resumo (facebook/bart-large-cnn)... Isso pode demorar na primeira vez.")
-            # max_length será ajustado na hora de fazer o resumo
-            self.local_summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+            self.tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+            self.model = AutoModelForSeq2SeqLM.from_pretrained("facebook/bart-large-cnn")
 
     def summarize(self, text):
         if not text or len(text.strip()) < 50:
@@ -39,7 +41,7 @@ class Summarizer:
                     f"{text}"
                 )
                 response = self.client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=self.gemini_model,
                     contents=prompt,
                 )
                 return response.text
@@ -53,13 +55,21 @@ class Summarizer:
                 
         elif self.summarizer_type == "local":
             try:
-                # Local HuggingFace Transformers
                 # o tamanho máximo do resumo baseado no texto de entrada
                 input_length = len(text.split())
                 max_len = min(130, max(30, int(input_length * 0.5)))
                 
-                resumo = self.local_summarizer(text, max_length=max_len, min_length=30, do_sample=False)
-                return resumo[0]['summary_text']
+                inputs = self.tokenizer(text, max_length=1024, return_tensors="pt", truncation=True)
+                summary_ids = self.model.generate(
+                    inputs["input_ids"], 
+                    max_length=max_len, 
+                    min_length=30, 
+                    length_penalty=2.0, 
+                    num_beams=4, 
+                    early_stopping=True
+                )
+                resumo = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+                return resumo
             except Exception as e:
                 print(f"Erro no modelo local: {str(e)}")
                 return f"Erro Local: {str(e)}"

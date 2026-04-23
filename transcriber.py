@@ -10,13 +10,18 @@ class Transcriber:
         # Usar cpu por padrão, mas pode mudar para 'cuda' se tiver GPU NVIDIA
         self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
 
-    def transcribe(self, audio_path):
+    def transcribe(self, audio_path, language=None):
         """
         Realiza a transcrição do arquivo de áudio
         """
         print(f"Iniciando transcrição do áudio: {audio_path}")
         try:
-            segments, info = self.model.transcribe(audio_path, beam_size=5)
+            if language and language != "auto":
+                print(f"Forçando idioma: {language}")
+                segments, info = self.model.transcribe(audio_path, beam_size=5, language=language)
+            else:
+                print("Detectando idioma automaticamente...")
+                segments, info = self.model.transcribe(audio_path, beam_size=5)
             
             print(f"Idioma detectado: {info.language} (probabilidade: {info.language_probability:.2f})")
             
